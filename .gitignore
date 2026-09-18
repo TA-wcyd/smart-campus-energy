@@ -1,0 +1,21 @@
+# Environment Variables
+.env
+.env.*
+
+# Build and Output Folders
+bin/
+obj/
+TestResults/
+
+# IDE & Editor Settings
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+
+# OS Files
+.DS_Store
+Thumbs.db
