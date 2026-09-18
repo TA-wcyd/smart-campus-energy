@@ -1,0 +1,34 @@
+# Git merge strategy: our Member-3 files always win during merges
+# This prevents conflicts when merging ratul → main
+
+# Member 3 owned files - ours always wins
+MyApp.Infrastructure/AI/OptimizerService.cs           merge=ours
+MyApp.Infrastructure/AI/ScheduleValidator.cs          merge=ours
+MyApp.Infrastructure/Data/AppDbContext.cs             merge=ours
+MyApp.Infrastructure/Data/EnergyRepository.cs        merge=ours
+MyApp.Infrastructure/Data/UserRepository.cs          merge=ours
+MyApp.Infrastructure/Data/Repositories.cs            merge=ours
+MyApp.Infrastructure/Configuration/SupabaseOptions.cs merge=ours
+MyApp.Infrastructure/Configuration/LlmOptions.cs     merge=ours
+MyApp.Infrastructure/DependencyInjection.cs           merge=ours
+MyApp.Infrastructure/MyApp.Infrastructure.csproj      merge=ours
+MyApp.Tests/OptimizerTests.cs                         merge=ours
+MyApp.Tests/ValidatorTests.cs                         merge=ours
+MyApp.Tests/RepositoryTests.cs                        merge=ours
+MyApp.Tests/TestData/SampleRequests.cs                merge=ours
+MyApp.Tests/MyApp.Tests.csproj                        merge=ours
+MyApp.Api/wwwroot/css/site.css                        merge=ours
+MyApp.Api/Pages/Index.cshtml                          merge=ours
+MyApp.Api/Pages/History.cshtml                        merge=ours
+MyApp.Api/Pages/Chat.cshtml                           merge=ours
+MyApp.Api/Pages/Shared/_Layout.cshtml                 merge=ours
+MyApp.Api/Properties/launchSettings.json              merge=ours
+MyApp.Api/Program.cs                                  merge=ours
+nuget.config                                          merge=ours
+
+# Line ending normalization
+* text=auto
+*.cs text eol=crlf
+*.cshtml text eol=crlf
+*.json text eol=crlf
+*.md text eol=lf
