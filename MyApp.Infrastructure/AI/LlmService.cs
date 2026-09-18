@@ -6,12 +6,13 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MyApp.Core.Interfaces;
 using MyApp.Core.Models;
+using MyApp.Infrastructure.AI;
+using MyApp.Infrastructure.Configuration;
 
-namespace MyApp.Infrastructure.AI;
-
-public class LlmService : ILlmService
+namespace MyApp.Infrastructure.AI
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _config;
