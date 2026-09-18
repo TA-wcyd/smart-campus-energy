@@ -8,5 +8,5 @@ public sealed class LlmOptions
     public string ApiKeyEnvVar { get; set; } = "GEMINI_API_KEY";
     public int TimeoutSeconds { get; set; } = 20;
     public int MaxRetries { get; set; } = 2;
-    public double Temperature { get; set; } = 0;
+    public double Temperature { get; set; } = 0.0;
 }
