@@ -1,0 +1,134 @@
+@page "{id:guid}"
+@model HistoryDetailModel
+@{
+    ViewData["Title"] = $"Scenario Details - {Model.Scenario?.ScenarioId ?? "Not Found"}";
+}
+
+<div class="page-header flex-between">
+    <div>
+        <h2>📋 Scenario Plan Details</h2>
+        <p class="subtitle">Scenario ID: <strong>@Model.Scenario?.ScenarioId</strong> | Timestamp: @Model.Scenario?.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss UTC")</p>
+    </div>
+    <div>
+        <a asp-page="/History" class="btn btn-outline">&larr; Back to History</a>
+    </div>
+</div>
+
+@if (Model.Plan == null)
+{
+    <div class="card empty-state">
+        <div class="empty-icon">⚠️</div>
+        <h3>No Energy Plan Found</h3>
+        <p>No optimization plan could be found for scenario ID <code>@Model.Id</code>.</p>
+    </div>
+}
+else
+{
+    <!-- Summary Metrics -->
+    <div class="summary-cards">
+        <div class="metric-card">
+            <span class="metric-title">Total Grid Energy</span>
+            <span class="metric-value">@Model.Plan.TotalGridKwh.ToString("F2") kWh</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-title">Total Cost</span>
+            <span class="metric-value highlight">@Model.Plan.TotalCostBdt.ToString("F2") BDT</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-title">Peak Grid Load</span>
+            <span class="metric-value">@Model.Plan.PeakGridKwh.ToString("F2") kWh</span>
+        </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="card summary-box">
+        <h4>Plan Summary</h4>
+        <p class="summary-desc">@Model.Plan.PlanSummary</p>
+    </div>
+
+    <!-- Directives -->
+    <div class="card">
+        <h3>🤖 Interpreted Directives</h3>
+        @if (Model.Directives != null && Model.Directives.Count > 0)
+        {
+            <div class="directives-list">
+                @foreach (var d in Model.Directives)
+                {
+                    var badgeClass = d.DirectiveType switch
+                    {
+                        "solar_reduction" => "badge-solar-reduction",
+                        "no_charge_window" => "badge-no-charge-window",
+                        "no_discharge_window" => "badge-no-discharge-window",
+                        "minimum_battery_reserve" => "badge-minimum-battery-reserve",
+                        "max_grid_window" => "badge-max-grid-window",
+                        _ => "badge-no-op"
+                    };
+
+                    <div class="directive-card">
+                        <div class="directive-header">
+                            <span class="directive-title">Note #@(d.NoteIndex + 1)</span>
+                            <span class="badge @badgeClass">@d.DirectiveType</span>
+                        </div>
+                        <p class="directive-explanation">@d.Explanation</p>
+                        @if (d.StructuredAdjustment != null)
+                        {
+                            <div class="directive-adjustment font-mono">
+                                <code>
+                                    @if (d.StructuredAdjustment.Hours != null) { <span>Hours: [@string.Join(", ", d.StructuredAdjustment.Hours)] </span> }
+                                    @if (d.StructuredAdjustment.Factor.HasValue) { <span>Factor: @d.StructuredAdjustment.Factor.Value </span> }
+                                    @if (d.StructuredAdjustment.MinimumEnergyKwh.HasValue) { <span>Min Reserve: @d.StructuredAdjustment.MinimumEnergyKwh.Value kWh </span> }
+                                    @if (d.StructuredAdjustment.MaxGridKwh.HasValue) { <span>Max Grid: @d.StructuredAdjustment.MaxGridKwh.Value kWh</span> }
+                                </code>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">No directives were processed.</p>
+        }
+    </div>
+
+    <!-- Dispatch Plan Table -->
+    <div class="card">
+        <h3>📅 24-Hour Dispatch Plan</h3>
+        @if (Model.HourlyPlan != null && Model.HourlyPlan.Count > 0)
+        {
+            <div class="table-responsive">
+                <table class="plan-table">
+                    <thead>
+                        <tr>
+                            <th>Hour</th>
+                            <th>Grid (kWh)</th>
+                            <th>Solar Used (kWh)</th>
+                            <th>Battery Action</th>
+                            <th>Battery (kWh)</th>
+                            <th>Battery SoC (kWh)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var h in Model.HourlyPlan)
+                        {
+                            <tr>
+                                <td class="font-bold">@h.Hour:00</td>
+                                <td>@h.GridKwh.ToString("F2")</td>
+                                <td>@h.SolarUsedKwh.ToString("F2")</td>
+                                <td>
+                                    <span class="badge badge-action-@h.BatteryAction.ToLower()">@h.BatteryAction</span>
+                                </td>
+                                <td>@h.BatteryKwh.ToString("F2")</td>
+                                <td>@h.BatteryEnergyAfterKwh.ToString("F2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">No hourly plan available.</p>
+        }
+    </div>
+}

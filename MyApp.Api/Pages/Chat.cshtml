@@ -1,0 +1,98 @@
+@page
+@model ChatModel
+@{
+    ViewData["Title"] = "System Chat";
+}
+
+<div class="page-header">
+    <h2>💬 Campus Energy Assistant Chat</h2>
+    <p class="subtitle">Interactive operator communications and grid event logging.</p>
+</div>
+
+<div class="chat-container card">
+    <div id="chatMessages" class="chat-message-list">
+        <div class="chat-message system">
+            <div class="chat-bubble">
+                <strong>System:</strong> Welcome to GridWise Assistant. Type a message below to log or query energy status.
+            </div>
+        </div>
+    </div>
+
+    <form id="chatForm" class="chat-input-form">
+        <input type="text" id="chatInput" class="form-control" placeholder="Type your message..." required />
+        <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        const userId = '00000000-0000-0000-0000-000000000001';
+        const chatForm = document.getElementById('chatForm');
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+
+        async function loadMessages() {
+            try {
+                const res = await fetch(`/chat/${userId}`);
+                if (res.ok) {
+                    const messages = await res.json();
+                    if (messages && messages.length > 0) {
+                        chatMessages.innerHTML = '';
+                        messages.forEach(m => appendMessage(m.role, m.content, m.created_at_utc || m.createdAtUtc));
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load chat messages:', err);
+            }
+        }
+
+        function appendMessage(role, content, time) {
+            const div = document.createElement('div');
+            div.className = `chat-message ${role}`;
+            const timeStr = time ? new Date(time).toLocaleTimeString() : '';
+            div.innerHTML = `
+                <div class="chat-bubble">
+                    <span class="chat-role">${role === 'user' ? '👤 Operator' : '🤖 Assistant'}</span>
+                    <span class="chat-time">${timeStr}</span>
+                    <div class="chat-text">${escapeHtml(content)}</div>
+                </div>
+            `;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const msg = chatInput.value.trim();
+            if (!msg) return;
+
+            appendMessage('user', msg, new Date().toISOString());
+            chatInput.value = '';
+
+            try {
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: userId, message: msg })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.reply_message) {
+                        appendMessage('assistant', data.reply_message.content, data.reply_message.created_at_utc || data.reply_message.createdAtUtc);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to send message:', err);
+            }
+        });
+
+        loadMessages();
+    </script>
+}

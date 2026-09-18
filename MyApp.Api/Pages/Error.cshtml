@@ -1,0 +1,20 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<div class="card empty-state" style="margin-top: 40px;">
+    <div class="empty-icon">⚠️</div>
+    <h2>An Error Occurred</h2>
+    <p>Sorry, the server encountered an issue while processing your request.</p>
+
+    @if (Model.ShowRequestId)
+    {
+        <p class="text-muted font-mono">
+            <strong>Request ID:</strong> <code>@Model.RequestId</code>
+        </p>
+    }
+
+    <a asp-page="/Index" class="btn btn-primary" style="margin-top: 20px;">&larr; Return to Home</a>
+</div>

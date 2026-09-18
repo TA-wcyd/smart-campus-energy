@@ -1,67 +1,103 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using MyApp.Core.DTOs;
+using MyApp.Core.Interfaces;
 using MyApp.Core.Models;
-using MyApp.Infrastructure.Data;
 
 namespace MyApp.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("users")]
 public class UserController : ControllerBase
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IUserRepository _userRepository;
+    private readonly IEnergyRepository _energyRepository;
     private readonly ILogger<UserController> _logger;
 
-    public UserController(AppDbContext dbContext, ILogger<UserController> logger)
+    public UserController(
+        IUserRepository userRepository,
+        IEnergyRepository energyRepository,
+        ILogger<UserController> logger)
     {
-        _dbContext = dbContext;
+        _userRepository = userRepository;
+        _energyRepository = energyRepository;
         _logger = logger;
     }
 
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers(CancellationToken ct)
+    [HttpPost("register")]
+    public async Task<IActionResult> RegisterUser([FromBody] RegisterUserRequest? request, CancellationToken ct)
     {
-        var users = await _dbContext.Users
-            .AsNoTracking()
-            .Select(u => new UserDto(u.Id, u.Username, u.Email, u.CreatedAt))
-            .ToListAsync(ct);
-
-        return Ok(users);
-    }
-
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<UserDto>> GetUserById(Guid id, CancellationToken ct)
-    {
-        var user = await _dbContext.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == id, ct);
-
-        if (user == null)
+        if (request == null || string.IsNullOrWhiteSpace(request.Email))
         {
-            return NotFound();
+            return BadRequest(new { error = "Valid email is required." });
         }
 
-        return Ok(new UserDto(user.Id, user.Username, user.Email, user.CreatedAt));
+        try
+        {
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = request.Email.Trim().ToLowerInvariant(),
+                DisplayName = request.DisplayName?.Trim() ?? string.Empty,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            var savedUser = await _userRepository.UpsertAsync(user, ct);
+            return Ok(savedUser);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to register/upsert user with email {Email}", request.Email);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to register user." });
+        }
     }
 
-    [HttpPost]
-    public async Task<ActionResult<UserDto>> CreateUser([FromBody] CreateUserRequest request, CancellationToken ct)
+    [HttpGet("{email}")]
+    public async Task<IActionResult> GetUser(string email, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Email))
+        if (string.IsNullOrWhiteSpace(email))
         {
-            return BadRequest("Username and Email are required.");
+            return BadRequest(new { error = "Email parameter cannot be empty." });
         }
 
-        var user = new User
+        try
         {
-            Username = request.Username.Trim(),
-            Email = request.Email.Trim()
-        };
+            var user = await _userRepository.GetByEmailAsync(email.Trim().ToLowerInvariant(), ct);
+            if (user == null)
+            {
+                return NotFound(new { error = "User not found." });
+            }
 
-        _dbContext.Users.Add(user);
-        await _dbContext.SaveChangesAsync(ct);
-
-        return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, new UserDto(user.Id, user.Username, user.Email, user.CreatedAt));
+            return Ok(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve user {Email}", email);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to retrieve user." });
+        }
     }
+
+    [HttpGet("{email}/history")]
+    public async Task<IActionResult> GetUserHistory(string email, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return BadRequest(new { error = "Email parameter cannot be empty." });
+        }
+
+        try
+        {
+            var scenarios = await _energyRepository.ListRecentScenariosAsync(20, ct);
+            return Ok(scenarios);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve history for user {Email}", email);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to retrieve history." });
+        }
+    }
+}
+
+public class RegisterUserRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
 }

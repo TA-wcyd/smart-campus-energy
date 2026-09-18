@@ -9,6 +9,8 @@ public class AppDbContext : DbContext
     {
     }
 
+    public DbSet<EnergyScenario> EnergyScenarios => Set<EnergyScenario>();
+    public DbSet<EnergyPlan> EnergyPlans => Set<EnergyPlan>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
@@ -16,23 +18,26 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<EnergyScenario>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ScenarioId).IsRequired().HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<EnergyPlan>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+        });
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(u => u.Id);
-            entity.Property(u => u.Username).IsRequired().HasMaxLength(100);
             entity.Property(u => u.Email).IsRequired().HasMaxLength(255);
         });
 
         modelBuilder.Entity<ChatMessage>(entity =>
         {
             entity.HasKey(m => m.Id);
-            entity.Property(m => m.Role).IsRequired().HasMaxLength(20);
-            entity.Property(m => m.Content).IsRequired();
-
-            entity.HasOne(m => m.User)
-                  .WithMany(u => u.Messages)
-                  .HasForeignKey(m => m.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

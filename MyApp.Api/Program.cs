@@ -1,68 +1,95 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
-using MyApp.Core.Interfaces;
-using MyApp.Infrastructure.AI;
+using MyApp.Api.Middleware;
+using MyApp.Infrastructure;
 using MyApp.Infrastructure.Data;
 
-// Load environment variables from .env if present
+// Load .env variables
 Env.TraversePath().Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllers();
+// Add Controllers with snake_case JSON serialization
+builder.Services.AddControllers()
+    .AddApplicationPart(typeof(MyApp.Api.Controllers.HealthController).Assembly)
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 
-// Resolve Database connection string (.env -> appsettings.json -> in-memory fallback)
-var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
-                       ?? builder.Configuration.GetConnectionString("DefaultConnection");
+// API Documentation
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
-if (!string.IsNullOrWhiteSpace(connectionString))
+// Infrastructure Layer (Database, LLM, Optimizer, Validator, Repositories)
+builder.Services.AddInfrastructure(builder.Configuration);
+
+// UI Pages
+builder.Services.AddRazorPages()
+    .AddApplicationPart(typeof(MyApp.Api.Controllers.HealthController).Assembly);
+
+// CORS for local development
+builder.Services.AddCors(options =>
 {
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(connectionString));
-}
-else
-{
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseInMemoryDatabase("MyAppDb"));
-}
+    options.AddPolicy("UiPolicy", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 
-// Register AI Service
-builder.Services.AddScoped<ILlmService, LlmService>();
-
-// Configure OpenAPI
-builder.Services.AddOpenApi();
+// Global Exception Handler
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
-// Automatically ensure schema exists in Supabase
+// Ensure Database schema is created
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    if (!string.IsNullOrWhiteSpace(connectionString))
+    try
     {
-        try
-        {
-            dbContext.Database.EnsureCreated();
-            Console.WriteLine("✅ Database connected and verified successfully!");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"⚠️ Database connection warning: {ex.Message}");
-        }
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        dbContext.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Could not ensure database created automatically.");
     }
 }
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Configure Middleware Pipeline
+app.UseExceptionHandler();
+
+if (app.Environment.IsDevelopment() || true)
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseRouting();
+app.UseCors("UiPolicy");
 
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapRazorPages();
+
+// Fallback health check
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Sample Scenario Endpoint
+app.MapGet("/samples/scenario", () =>
+    Results.File(
+        Path.Combine(app.Environment.ContentRootPath, "wwwroot", "samples", "sample-scenario.json"),
+        "application/json"));
 
 app.Run();
+
+public partial class Program { }

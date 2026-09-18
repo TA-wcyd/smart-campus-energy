@@ -1,0 +1,162 @@
+@page
+@model OptimizeModel
+@{
+    ViewData["Title"] = "Energy Optimizer";
+}
+
+<div class="page-header">
+    <h2>⚡ 24-Hour Microgrid Energy Optimizer</h2>
+    <p class="subtitle">Submit operator instructions, load profiles, and battery specifications for real-time AI constraint reasoning and cost minimization.</p>
+</div>
+
+<!-- Error Alert Banner -->
+<div id="errorBanner" class="alert alert-danger" style="display: none;">
+    <span class="alert-icon">⚠️</span>
+    <span id="errorMessage">An error occurred during optimization.</span>
+</div>
+
+<div class="optimize-layout">
+    <!-- Input Section -->
+    <div class="input-panel card">
+        <div class="panel-header">
+            <h3>Scenario Configuration</h3>
+            <button type="button" id="loadSampleBtn" class="btn btn-sm btn-outline">📥 Load Sample</button>
+        </div>
+
+        <form id="optimizeForm">
+            <div class="form-group">
+                <label for="scenarioIdInput"><strong>Scenario ID</strong></label>
+                <input type="text" id="scenarioIdInput" class="form-control" value="bup-cse-fest-2026-sample" required />
+            </div>
+
+            <div class="form-group">
+                <label for="notesInput">
+                    <strong>Operator Notes (1 to 3 notes, one per line)</strong>
+                </label>
+                <textarea id="notesInput" class="form-control font-mono" rows="4" placeholder="Solar output will drop to about 20% from 1 PM to 3 PM.&#10;Do not charge the battery between 2 PM and 4 PM.&#10;The cafeteria menu changes tomorrow.">Solar output will drop to about 20% from 1 PM to 3 PM.
+Do not charge the battery between 2 PM and 4 PM.
+The cafeteria menu changes tomorrow.</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="batteryInput">
+                    <strong>Battery Parameters (JSON)</strong>
+                </label>
+                <textarea id="batteryInput" class="form-control font-mono" rows="6">{
+  "capacity_kwh": 500.0,
+  "initial_energy_kwh": 200.0,
+  "minimum_energy_kwh": 50.0,
+  "max_charge_kwh_per_hour": 100.0,
+  "max_discharge_kwh_per_hour": 100.0
+}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="hoursInput">
+                    <strong>24-Hour Load & Solar Profile (JSON)</strong>
+                </label>
+                <textarea id="hoursInput" class="form-control font-mono" rows="8">[
+  { "hour": 0, "demand_kwh": 120.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 4.5 },
+  { "hour": 1, "demand_kwh": 110.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 4.5 },
+  { "hour": 2, "demand_kwh": 100.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 4.5 },
+  { "hour": 3, "demand_kwh": 95.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 4.5 },
+  { "hour": 4, "demand_kwh": 105.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 4.5 },
+  { "hour": 5, "demand_kwh": 130.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 5.0 },
+  { "hour": 6, "demand_kwh": 180.0, "solar_kwh": 20.0, "tariff_bdt_per_kwh": 6.5 },
+  { "hour": 7, "demand_kwh": 240.0, "solar_kwh": 60.0, "tariff_bdt_per_kwh": 7.0 },
+  { "hour": 8, "demand_kwh": 310.0, "solar_kwh": 140.0, "tariff_bdt_per_kwh": 8.0 },
+  { "hour": 9, "demand_kwh": 380.0, "solar_kwh": 220.0, "tariff_bdt_per_kwh": 8.5 },
+  { "hour": 10, "demand_kwh": 420.0, "solar_kwh": 300.0, "tariff_bdt_per_kwh": 9.0 },
+  { "hour": 11, "demand_kwh": 450.0, "solar_kwh": 340.0, "tariff_bdt_per_kwh": 9.0 },
+  { "hour": 12, "demand_kwh": 440.0, "solar_kwh": 350.0, "tariff_bdt_per_kwh": 9.0 },
+  { "hour": 13, "demand_kwh": 410.0, "solar_kwh": 320.0, "tariff_bdt_per_kwh": 9.0 },
+  { "hour": 14, "demand_kwh": 390.0, "solar_kwh": 280.0, "tariff_bdt_per_kwh": 8.5 },
+  { "hour": 15, "demand_kwh": 360.0, "solar_kwh": 190.0, "tariff_bdt_per_kwh": 8.5 },
+  { "hour": 16, "demand_kwh": 330.0, "solar_kwh": 100.0, "tariff_bdt_per_kwh": 8.0 },
+  { "hour": 17, "demand_kwh": 370.0, "solar_kwh": 30.0, "tariff_bdt_per_kwh": 9.5 },
+  { "hour": 18, "demand_kwh": 480.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 12.0 },
+  { "hour": 19, "demand_kwh": 510.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 12.5 },
+  { "hour": 20, "demand_kwh": 490.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 12.0 },
+  { "hour": 21, "demand_kwh": 420.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 10.0 },
+  { "hour": 22, "demand_kwh": 280.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 7.0 },
+  { "hour": 23, "demand_kwh": 170.0, "solar_kwh": 0.0, "tariff_bdt_per_kwh": 5.0 }
+]</textarea>
+            </div>
+
+            <button type="button" id="runOptimizeBtn" class="btn btn-primary btn-block">
+                🚀 Run Optimization
+            </button>
+        </form>
+    </div>
+
+    <!-- Output Section -->
+    <div class="output-panel">
+        <!-- Spinner Overlay -->
+        <div id="loadingSpinner" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p>Reasoning over operator directives and solving optimal schedule...</p>
+        </div>
+
+        <!-- Initial Placeholder -->
+        <div id="resultsPlaceholder" class="card empty-state">
+            <div class="empty-icon">📊</div>
+            <h3>Optimization Results</h3>
+            <p>Click <strong>"Run Optimization"</strong> to evaluate LLM directive interpretations and produce the 24-hour cost-optimal energy schedule.</p>
+        </div>
+
+        <!-- Results Container -->
+        <div id="resultsContent" style="display: none;">
+            <!-- Summary Metric Cards -->
+            <div class="summary-cards">
+                <div class="metric-card">
+                    <span class="metric-title">Total Grid Energy</span>
+                    <span class="metric-value" id="summaryGridKwh">0.00 kWh</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-title">Total Estimated Cost</span>
+                    <span class="metric-value highlight" id="summaryCostBdt">0.00 BDT</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-title">Peak Grid Load</span>
+                    <span class="metric-value" id="summaryPeakKwh">0.00 kWh</span>
+                </div>
+            </div>
+
+            <!-- Plan Summary Card -->
+            <div class="card summary-box">
+                <h4>Executive Summary</h4>
+                <p id="summaryText" class="summary-desc"></p>
+            </div>
+
+            <!-- Directive Interpretation Cards -->
+            <div class="card">
+                <h3>🤖 LLM Directive Interpretations</h3>
+                <div id="directivesContainer" class="directives-list"></div>
+            </div>
+
+            <!-- Hourly Plan Table -->
+            <div class="card">
+                <h3>📅 24-Hour Dispatch Plan</h3>
+                <div class="table-responsive">
+                    <table class="plan-table">
+                        <thead>
+                            <tr>
+                                <th>Hour</th>
+                                <th>Grid (kWh)</th>
+                                <th>Solar Used (kWh)</th>
+                                <th>Battery Action</th>
+                                <th>Battery (kWh)</th>
+                                <th>Battery SoC (kWh)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="planTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/optimize.js"></script>
+}
