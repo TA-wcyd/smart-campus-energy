@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MyApp.Api.Dtos;
 using MyApp.Core.Interfaces;
 using MyApp.Core.Models;
+using MyApp.Infrastructure.AI;
 using Xunit;
 
 namespace MyApp.Tests;
@@ -95,43 +96,7 @@ public class EndToEndTests : IClassFixture<WebApplicationFactory<Program>>
     {
         public Task<List<DirectiveInterpretation>> InterpretAsync(IReadOnlyList<string> notes, CancellationToken ct = default)
         {
-            var interpretations = new List<DirectiveInterpretation>();
-            for (int i = 0; i < notes.Count; i++)
-            {
-                var note = notes[i];
-                if (note.Contains("Solar", StringComparison.OrdinalIgnoreCase))
-                {
-                    interpretations.Add(new DirectiveInterpretation
-                    {
-                        NoteIndex = i,
-                        Applies = true,
-                        DirectiveType = "solar_reduction",
-                        Explanation = "Solar output reduced during specified hours.",
-                        StructuredAdjustment = new StructuredAdjustment { Hours = new List<int> { 13, 14, 15 }, Factor = 0.2 }
-                    });
-                }
-                else if (note.Contains("Do not charge", StringComparison.OrdinalIgnoreCase))
-                {
-                    interpretations.Add(new DirectiveInterpretation
-                    {
-                        NoteIndex = i,
-                        Applies = true,
-                        DirectiveType = "no_charge_window",
-                        Explanation = "Battery charging prohibited between 2 PM and 4 PM.",
-                        StructuredAdjustment = new StructuredAdjustment { Hours = new List<int> { 14, 15, 16 } }
-                    });
-                }
-                else
-                {
-                    interpretations.Add(new DirectiveInterpretation
-                    {
-                        NoteIndex = i,
-                        Applies = false,
-                        DirectiveType = "no_op",
-                        Explanation = "Irrelevant cafeteria note."
-                    });
-                }
-            }
+            var interpretations = notes.Select((note, i) => LlmService.ParseDirectiveDeterministic(note, i)).ToList();
             return Task.FromResult(interpretations);
         }
     }
