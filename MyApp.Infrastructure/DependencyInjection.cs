@@ -12,12 +12,17 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        // Database connection string from .env or config
-        var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
+        // Database connection string from environment variables or configuration
+        var envVarName = config["Supabase:ConnectionStringEnvVar"] ?? "SUPABASE_CONNECTION_STRING";
+        var connectionString = Environment.GetEnvironmentVariable(envVarName)
+                               ?? Environment.GetEnvironmentVariable("SUPABASE_CONNECTION_STRING")
+                               ?? Environment.GetEnvironmentVariable("DATABASE_URL")
                                ?? config.GetConnectionString("DefaultConnection")
-                               ?? config["Supabase:ConnectionStringEnvVar"];
+                               ?? config["Supabase:ConnectionString"];
 
-        if (!string.IsNullOrWhiteSpace(connectionString) && !connectionString.StartsWith("YOUR_"))
+        if (!string.IsNullOrWhiteSpace(connectionString) &&
+            !connectionString.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase) &&
+            !connectionString.StartsWith("your-", StringComparison.OrdinalIgnoreCase))
         {
             services.AddDbContext<AppDbContext>(options =>
                 options.UseNpgsql(connectionString));
