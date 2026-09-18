@@ -1,184 +1,255 @@
-using Microsoft.Extensions.Configuration;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MyApp.Core.Interfaces;
 using MyApp.Core.Models;
+using MyApp.Infrastructure.AI;
+using MyApp.Infrastructure.Configuration;
 
-namespace MyApp.Infrastructure.AI;
-
-public class LlmService : ILlmService
+namespace MyApp.Infrastructure.AI
 {
-    private readonly IConfiguration _config;
-    private readonly ILogger<LlmService> _logger;
-
-    public LlmService(IConfiguration config, ILogger<LlmService> logger)
+    public interface IWebHostEnvironment
     {
-        _config = config;
-        _logger = logger;
+        string ContentRootPath { get; }
     }
 
-    public Task<List<DirectiveInterpretation>> InterpretAsync(IReadOnlyList<string> notes, CancellationToken ct = default)
+    public sealed class LlmService : ILlmService
     {
-        _logger.LogInformation("Interpreting {Count} operator notes with LLM", notes.Count);
+        private readonly HttpClient _httpClient;
+        private readonly LlmOptions _options;
+        private readonly ILogger<LlmService> _logger;
+        private readonly string _apiKey;
+        private readonly string _systemPrompt;
 
-        var list = new List<DirectiveInterpretation>();
-        for (int i = 0; i < notes.Count; i++)
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
-            var note = notes[i];
-            if (note.Contains("solar", StringComparison.OrdinalIgnoreCase))
+            PropertyNameCaseInsensitive = true
+        };
+
+        public LlmService(
+            HttpClient httpClient,
+            IOptions<LlmOptions> options,
+            IWebHostEnvironment env,
+            ILogger<LlmService> logger)
+        {
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+            _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            _apiKey = Environment.GetEnvironmentVariable(_options.ApiKeyEnvVar) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(_apiKey))
             {
-                list.Add(new DirectiveInterpretation
-                {
-                    NoteIndex = i,
-                    Applies = true,
-                    DirectiveType = "solar_reduction",
-                    Explanation = "Solar generation capacity reduced during target afternoon window (1 PM - 3 PM).",
-                    StructuredAdjustment = new StructuredAdjustment { Hours = new List<int> { 13, 14, 15 }, Factor = 0.2 }
-                });
+                throw new InvalidOperationException($"API key not found in environment variable '{_options.ApiKeyEnvVar}'.");
             }
-            else if (note.Contains("charge", StringComparison.OrdinalIgnoreCase))
+
+            var promptPath = Path.Combine(env.ContentRootPath, "AI", "Prompts", "interpreter-prompt.txt");
+            if (!File.Exists(promptPath))
             {
-                list.Add(new DirectiveInterpretation
+                var fallbackPath = Path.Combine(AppContext.BaseDirectory, "AI", "Prompts", "interpreter-prompt.txt");
+                if (File.Exists(fallbackPath))
                 {
-                    NoteIndex = i,
-                    Applies = true,
-                    DirectiveType = "no_charge_window",
-                    Explanation = "Battery charging restricted between 2 PM and 4 PM to manage network load.",
-                    StructuredAdjustment = new StructuredAdjustment { Hours = new List<int> { 14, 15, 16 } }
-                });
+                    promptPath = fallbackPath;
+                }
+                else
+                {
+                    throw new FileNotFoundException($"System prompt file not found at '{promptPath}'.", promptPath);
+                }
             }
-            else
+
+            _systemPrompt = File.ReadAllText(promptPath);
+        }
+
+        // Secondary constructor enabling ASP.NET Core DI activation when HttpClient or IOptions is not explicitly registered
+        public LlmService(
+            IServiceProvider serviceProvider,
+            ILogger<LlmService> logger)
+            : this(
+                serviceProvider.GetService(typeof(HttpClient)) as HttpClient ?? new HttpClient(),
+                serviceProvider.GetService(typeof(IOptions<LlmOptions>)) as IOptions<LlmOptions> ?? Options.Create(new LlmOptions()),
+                serviceProvider.GetService(typeof(IWebHostEnvironment)) as IWebHostEnvironment ?? new FallbackWebHostEnvironment(),
+                logger)
+        {
+        }
+
+        private sealed class FallbackWebHostEnvironment : IWebHostEnvironment
+        {
+            public string ContentRootPath
             {
-                list.Add(new DirectiveInterpretation
+                get
                 {
-                    NoteIndex = i,
-                    Applies = false,
+                    var dir = AppContext.BaseDirectory;
+                    while (!string.IsNullOrEmpty(dir))
+                    {
+                        if (Directory.Exists(Path.Combine(dir, "MyApp.Infrastructure", "AI", "Prompts")))
+                        {
+                            return Path.Combine(dir, "MyApp.Infrastructure");
+                        }
+                        if (Directory.Exists(Path.Combine(dir, "AI", "Prompts")))
+                        {
+                            return dir;
+                        }
+                        var parent = Directory.GetParent(dir);
+                        if (parent == null) break;
+                        dir = parent.FullName;
+                    }
+                    return AppContext.BaseDirectory;
+                }
+            }
+        }
+
+        public async Task<List<DirectiveInterpretation>> InterpretAsync(IReadOnlyList<string> notes, CancellationToken ct = default)
+        {
+            if (notes == null || notes.Count == 0)
+            {
+                return new List<DirectiveInterpretation>();
+            }
+
+            var tasks = notes.Select((note, i) => InterpretOneIndexedAsync(note, i, ct)).ToArray();
+            var results = await Task.WhenAll(tasks);
+            return results.OrderBy(r => r.NoteIndex).ToList();
+        }
+
+        private async Task<DirectiveInterpretation> InterpretOneIndexedAsync(string note, int index, CancellationToken ct)
+        {
+            try
+            {
+                var raw = await InterpretOneWithRetryAsync(note, ct);
+                return Guardrails.Normalize(raw, index);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected failure interpreting note {Index}: '{Note}'", index, note);
+                return Guardrails.Normalize(new LlmDirectiveRaw
+                {
                     DirectiveType = "no_op",
-                    Explanation = "General operational note; no mathematical dispatch adjustment required."
-                });
+                    Applies = false,
+                    StructuredAdjustment = null,
+                    Explanation = "Unexpected failure; defaulted to no_op."
+                }, index);
             }
         }
 
-        return Task.FromResult(list);
-    }
-}
-
-public class OptimizerService : IOptimizerService
-{
-    public List<HourlyPlanEntry> Solve(OptimizeRequest req, IReadOnlyList<DirectiveInterpretation> directives)
-    {
-        var plan = new List<HourlyPlanEntry>();
-        double currentSoc = req.Battery.InitialEnergyKwh;
-
-        // Apply solar adjustments
-        var solarFactors = new double[24];
-        Array.Fill(solarFactors, 1.0);
-
-        var noChargeHours = new HashSet<int>();
-        var noDischargeHours = new HashSet<int>();
-
-        foreach (var d in directives.Where(d => d.Applies && d.StructuredAdjustment != null))
+        private async Task<LlmDirectiveRaw> InterpretOneWithRetryAsync(string note, CancellationToken ct)
         {
-            if (d.DirectiveType == "solar_reduction" && d.StructuredAdjustment?.Hours != null)
+            for (int attempt = 0; attempt <= _options.MaxRetries; attempt++)
             {
-                foreach (var h in d.StructuredAdjustment.Hours.Where(hr => hr >= 0 && hr < 24))
+                try
                 {
-                    solarFactors[h] = d.StructuredAdjustment.Factor ?? 1.0;
+                    return await CallGeminiAsync(note, ct);
                 }
-            }
-            else if (d.DirectiveType == "no_charge_window" && d.StructuredAdjustment?.Hours != null)
-            {
-                foreach (var h in d.StructuredAdjustment.Hours.Where(hr => hr >= 0 && hr < 24))
+                catch (Exception ex)
                 {
-                    noChargeHours.Add(h);
-                }
-            }
-            else if (d.DirectiveType == "no_discharge_window" && d.StructuredAdjustment?.Hours != null)
-            {
-                foreach (var h in d.StructuredAdjustment.Hours.Where(hr => hr >= 0 && hr < 24))
-                {
-                    noDischargeHours.Add(h);
-                }
-            }
-        }
-
-        foreach (var entry in req.Hours)
-        {
-            double adjustedSolar = entry.SolarKwh * solarFactors[entry.Hour];
-            double netDemand = entry.DemandKwh - adjustedSolar;
-            string action = "HOLD";
-            double batteryDelta = 0.0;
-
-            if (netDemand < 0)
-            {
-                // Excess solar: Charge battery if allowed
-                double excessSolar = -netDemand;
-                if (!noChargeHours.Contains(entry.Hour))
-                {
-                    double maxCanCharge = Math.Min(req.Battery.MaxChargeKwhPerHour, req.Battery.CapacityKwh - currentSoc);
-                    double chargeAmount = Math.Min(excessSolar, maxCanCharge);
-                    if (chargeAmount > 0)
+                    _logger.LogWarning(ex, "Attempt {Attempt} failed for note '{Note}'.", attempt + 1, note);
+                    if (attempt < _options.MaxRetries)
                     {
-                        action = "CHARGE";
-                        batteryDelta = chargeAmount;
-                        currentSoc += chargeAmount;
-                    }
-                }
-            }
-            else if (netDemand > 0 && entry.TariffBdtPerKwh >= 9.0)
-            {
-                // High tariff peak: Discharge battery if allowed
-                if (!noDischargeHours.Contains(entry.Hour))
-                {
-                    double maxCanDischarge = Math.Min(req.Battery.MaxDischargeKwhPerHour, currentSoc - req.Battery.MinimumEnergyKwh);
-                    double dischargeAmount = Math.Min(netDemand, Math.Max(0, maxCanDischarge));
-                    if (dischargeAmount > 0)
-                    {
-                        action = "DISCHARGE";
-                        batteryDelta = dischargeAmount;
-                        currentSoc -= dischargeAmount;
+                        await Task.Delay(300 * (attempt + 1), ct);
                     }
                 }
             }
 
-            double gridKwh = action == "DISCHARGE" ? Math.Max(0, netDemand - batteryDelta) : Math.Max(0, netDemand);
-            double solarUsed = Math.Min(entry.DemandKwh, adjustedSolar);
-
-            plan.Add(new HourlyPlanEntry
+            _logger.LogError("All {Count} attempts failed for note '{Note}'. Defaulting to no_op.", _options.MaxRetries + 1, note);
+            return new LlmDirectiveRaw
             {
-                Hour = entry.Hour,
-                GridKwh = Math.Round(gridKwh, 2),
-                SolarUsedKwh = Math.Round(solarUsed, 2),
-                BatteryAction = action,
-                BatteryKwh = Math.Round(batteryDelta, 2),
-                BatteryEnergyAfterKwh = Math.Round(currentSoc, 2)
-            });
+                DirectiveType = "no_op",
+                Applies = false,
+                StructuredAdjustment = null,
+                Explanation = "LLM unavailable; defaulted to no_op."
+            };
         }
 
-        return plan;
-    }
-}
-
-public class ScheduleValidator : IScheduleValidator
-{
-    public (bool IsValid, string? Reason) Validate(OptimizeRequest req, IReadOnlyList<HourlyPlanEntry> plan, IReadOnlyList<DirectiveInterpretation> directives)
-    {
-        if (plan.Count != 24)
+        private async Task<LlmDirectiveRaw> CallGeminiAsync(string note, CancellationToken ct)
         {
-            return (false, "Dispatch plan must contain exactly 24 entries.");
-        }
+            var url = $"{_options.BaseUrl.TrimEnd('/')}/v1beta/models/{_options.Model}:generateContent?key={_apiKey}";
 
-        foreach (var p in plan)
-        {
-            if (p.BatteryEnergyAfterKwh < req.Battery.MinimumEnergyKwh - 0.01)
+            var requestBody = new
             {
-                return (false, $"Battery SoC at hour {p.Hour} dropped below minimum reserve limit ({req.Battery.MinimumEnergyKwh} kWh).");
+                systemInstruction = new
+                {
+                    parts = new[] { new { text = _systemPrompt } }
+                },
+                contents = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        parts = new[]
+                        {
+                            new { text = "OPERATOR NOTE:\n" + note + "\n\nReturn only the JSON object." }
+                        }
+                    }
+                },
+                generationConfig = new
+                {
+                    temperature = _options.Temperature,
+                    responseMimeType = "application/json"
+                }
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.PostAsync(url, content, ct);
+            var responseText = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"Gemini API error (Status: {(int)response.StatusCode} {response.StatusCode}): {responseText}");
             }
-            if (p.BatteryEnergyAfterKwh > req.Battery.CapacityKwh + 0.01)
+
+            string rawCandidateText;
+            try
             {
-                return (false, $"Battery SoC at hour {p.Hour} exceeded maximum capacity ({req.Battery.CapacityKwh} kWh).");
+                using var doc = JsonDocument.Parse(responseText);
+                var candidates = doc.RootElement.GetProperty("candidates");
+                if (candidates.GetArrayLength() == 0)
+                {
+                    throw new InvalidOperationException("No candidates returned in response.");
+                }
+
+                rawCandidateText = candidates[0]
+                    .GetProperty("content")
+                    .GetProperty("parts")[0]
+                    .GetProperty("text")
+                    .GetString() ?? string.Empty;
+            }
+            catch (Exception ex) when (ex is not InvalidOperationException)
+            {
+                _logger.LogError(ex, "Failed to parse candidates JSON from response: {ResponseText}", responseText);
+                return new LlmDirectiveRaw
+                {
+                    DirectiveType = "no_op",
+                    Applies = false,
+                    StructuredAdjustment = null,
+                    Explanation = "Malformed response structure from LLM."
+                };
+            }
+
+            _logger.LogInformation("Gemini raw response: {RawText}", rawCandidateText);
+
+            try
+            {
+                var raw = JsonSerializer.Deserialize<LlmDirectiveRaw>(rawCandidateText, JsonOptions);
+                return raw ?? new LlmDirectiveRaw
+                {
+                    DirectiveType = "no_op",
+                    Applies = false,
+                    StructuredAdjustment = null,
+                    Explanation = "Deserialization returned null."
+                };
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Malformed JSON from Gemini: {RawText}", rawCandidateText);
+                return new LlmDirectiveRaw
+                {
+                    DirectiveType = "no_op",
+                    Applies = false,
+                    StructuredAdjustment = null,
+                    Explanation = "Malformed JSON from LLM; defaulted to no_op."
+                };
             }
         }
-
-        return (true, null);
     }
 }
