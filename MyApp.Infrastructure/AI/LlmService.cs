@@ -6,8 +6,11 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MyApp.Core.Interfaces;
 using MyApp.Core.Models;
+using MyApp.Infrastructure.AI;
+using MyApp.Infrastructure.Configuration;
 
 namespace MyApp.Infrastructure.AI
 {
