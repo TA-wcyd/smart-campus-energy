@@ -4,48 +4,50 @@
     ViewData["Title"] = "Optimization History";
 }
 
-<div class="page-header">
-    <h2>📜 Optimization History</h2>
-    <p class="subtitle">Review past 24-hour optimization runs, scenario inputs, and executed dispatch schedules.</p>
-</div>
+<div class="page-container">
+    <div class="page-header animate-in">
+        <div class="page-title">📋 Optimization History</div>
+        <div class="page-subtitle">Past 24-hour optimization runs, scenario inputs, and executed dispatch schedules.</div>
+    </div>
 
-<div class="card">
-    @if (Model.Scenarios == null || Model.Scenarios.Count == 0)
-    {
-        <div class="empty-state">
-            <div class="empty-icon">📁</div>
-            <h3>No Scenarios Recorded</h3>
-            <p>You haven't persisted any optimization runs yet. Go to <a asp-page="/Optimize">Optimize</a> and submit a scenario.</p>
-        </div>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>Scenario ID</th>
-                        <th>Created At (UTC)</th>
-                        <th>Scenario GUID</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in Model.Scenarios)
-                    {
-                        <tr class="clickable-row" onclick="window.location.href='/History/@item.Id'">
-                            <td class="font-bold">@item.ScenarioId</td>
-                            <td>@item.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                            <td class="font-mono text-muted">@item.Id</td>
-                            <td>
-                                <a asp-page="/HistoryDetail" asp-route-id="@item.Id" class="btn btn-sm btn-outline">
-                                    View Details &rarr;
-                                </a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
+    <div class="card animate-in">
+        @if (Model.Scenarios == null || Model.Scenarios.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📁</div>
+                <div class="empty-title">No Scenarios Recorded</div>
+                <div class="empty-text">You haven't run any optimizations yet. Submit a scenario to get started.</div>
+                <a asp-page="/Optimize" class="btn btn-primary">⚡ Go to Optimizer</a>
+            </div>
+        }
+        else
+        {
+            <div class="card-header">
+                <span class="card-title">📋 Recent Runs</span>
+                <span class="badge badge-success">@Model.Scenarios.Count scenarios</span>
+            </div>
+
+            <div class="history-list stagger">
+                @foreach (var item in Model.Scenarios)
+                {
+                    <a class="history-item animate-in"
+                       asp-page="/HistoryDetail" asp-route-id="@item.Id"
+                       id="history-@item.Id">
+                        <div>
+                            <div class="history-item-id">@item.ScenarioId</div>
+                            <div class="history-item-meta">
+                                @item.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
+                                &nbsp;·&nbsp;
+                                <span style="font-family:var(--font-mono);font-size:0.75rem;opacity:0.6;">@item.Id.ToString()[..8]…</span>
+                            </div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:0.75rem;">
+                            <span class="badge badge-success">Completed</span>
+                            <span style="color:var(--text-muted);font-size:1.1rem;">→</span>
+                        </div>
+                    </a>
+                }
+            </div>
+        }
+    </div>
 </div>

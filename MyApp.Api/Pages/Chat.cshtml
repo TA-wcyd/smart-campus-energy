@@ -1,98 +1,144 @@
 @page
 @model ChatModel
 @{
-    ViewData["Title"] = "System Chat";
+    ViewData["Title"] = "AI Chat Assistant";
 }
 
-<div class="page-header">
-    <h2>💬 Campus Energy Assistant Chat</h2>
-    <p class="subtitle">Interactive operator communications and grid event logging.</p>
-</div>
-
-<div class="chat-container card">
-    <div id="chatMessages" class="chat-message-list">
-        <div class="chat-message system">
-            <div class="chat-bubble">
-                <strong>System:</strong> Welcome to GridWise Assistant. Type a message below to log or query energy status.
-            </div>
-        </div>
+<div class="page-container">
+    <div class="page-header animate-in">
+        <div class="page-title">💬 Campus Energy Assistant</div>
+        <div class="page-subtitle">Ask about energy status, explain dispatch decisions, or query optimization strategies.</div>
     </div>
 
-    <form id="chatForm" class="chat-input-form">
-        <input type="text" id="chatInput" class="form-control" placeholder="Type your message..." required />
-        <button type="submit" class="btn btn-primary">Send</button>
-    </form>
+    <div class="chat-wrapper">
+        <!-- Message list -->
+        <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;padding:1.25rem;">
+            <div id="chatMessages" class="chat-messages">
+                <!-- Welcome bubble -->
+                <div class="chat-bubble">
+                    <div class="chat-avatar assistant-avatar">🤖</div>
+                    <div class="chat-text">
+                        Welcome to <strong>GridWise Assistant</strong>. Ask me anything about campus energy optimization, dispatch schedules, or battery management.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input row -->
+        <div class="card" style="padding:1rem;">
+            <form id="chatForm" class="chat-input-row">
+                <textarea id="chatInput"
+                          class="form-control"
+                          placeholder="Ask about energy, schedules, battery status…"
+                          rows="2"
+                          style="resize:none;min-height:unset;padding:0.65rem 1rem;font-family:var(--font-sans);"
+                          required></textarea>
+                <button type="submit" id="btn-chat-send" class="btn btn-primary" style="align-self:stretch;padding:0 1.5rem;">
+                    ➤ Send
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
-    <script>
-        const userId = '00000000-0000-0000-0000-000000000001';
-        const chatForm = document.getElementById('chatForm');
-        const chatInput = document.getElementById('chatInput');
-        const chatMessages = document.getElementById('chatMessages');
+<script>
+    const userId = '00000000-0000-0000-0000-000000000001';
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatMessages = document.getElementById('chatMessages');
 
-        async function loadMessages() {
-            try {
-                const res = await fetch(`/chat/${userId}`);
-                if (res.ok) {
-                    const messages = await res.json();
-                    if (messages && messages.length > 0) {
-                        chatMessages.innerHTML = '';
-                        messages.forEach(m => appendMessage(m.role, m.content, m.created_at_utc || m.createdAtUtc));
-                    }
+    function escapeHtml(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    function appendMessage(role, content, time) {
+        const isUser = role === 'user';
+        const timeStr = time ? new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const div = document.createElement('div');
+        div.className = `chat-bubble${isUser ? ' user' : ''} animate-in`;
+        div.innerHTML = `
+            <div class="chat-avatar ${isUser ? 'user-avatar' : 'assistant-avatar'}">${isUser ? '👤' : '🤖'}</div>
+            <div>
+                <div class="chat-text">${escapeHtml(content)}</div>
+                ${timeStr ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.3rem;${isUser ? 'text-align:right' : ''}">${timeStr}</div>` : ''}
+            </div>
+        `;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function appendTyping() {
+        const div = document.createElement('div');
+        div.className = 'chat-bubble';
+        div.id = 'typing-indicator';
+        div.innerHTML = `
+            <div class="chat-avatar assistant-avatar">🤖</div>
+            <div class="chat-text" style="display:flex;align-items:center;gap:0.5rem;">
+                <div class="spinner"></div>
+                <span style="color:var(--text-muted);font-size:0.875rem;">Thinking…</span>
+            </div>
+        `;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function loadMessages() {
+        try {
+            const res = await fetch(`/chat/${userId}`);
+            if (res.ok) {
+                const messages = await res.json();
+                if (messages && messages.length > 0) {
+                    chatMessages.innerHTML = '';
+                    messages.forEach(m => appendMessage(m.role, m.content, m.created_at_utc || m.createdAtUtc));
                 }
-            } catch (err) {
-                console.error('Failed to load chat messages:', err);
             }
-        }
+        } catch (err) { /* silent */ }
+    }
 
-        function appendMessage(role, content, time) {
-            const div = document.createElement('div');
-            div.className = `chat-message ${role}`;
-            const timeStr = time ? new Date(time).toLocaleTimeString() : '';
-            div.innerHTML = `
-                <div class="chat-bubble">
-                    <span class="chat-role">${role === 'user' ? '👤 Operator' : '🤖 Assistant'}</span>
-                    <span class="chat-time">${timeStr}</span>
-                    <div class="chat-text">${escapeHtml(content)}</div>
-                </div>
-            `;
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = chatInput.value.trim();
+        if (!msg) return;
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        appendMessage('user', msg, new Date().toISOString());
+        chatInput.value = '';
+        appendTyping();
 
-        chatForm.addEventListener('submit', async (e) => {
+        try {
+            const res = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, message: msg })
+            });
+            const typing = document.getElementById('typing-indicator');
+            if (typing) typing.remove();
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.reply_message) {
+                    appendMessage('assistant', data.reply_message.content, data.reply_message.created_at_utc);
+                }
+            } else {
+                appendMessage('assistant', '⚠️ Error communicating with the server. Please try again.', null);
+            }
+        } catch (err) {
+            const typing = document.getElementById('typing-indicator');
+            if (typing) typing.remove();
+            appendMessage('assistant', '⚠️ Network error. Please check your connection.', null);
+        }
+    });
+
+    // Enter to send, Shift+Enter for newline
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            const msg = chatInput.value.trim();
-            if (!msg) return;
+            chatForm.dispatchEvent(new Event('submit'));
+        }
+    });
 
-            appendMessage('user', msg, new Date().toISOString());
-            chatInput.value = '';
-
-            try {
-                const res = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: userId, message: msg })
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.reply_message) {
-                        appendMessage('assistant', data.reply_message.content, data.reply_message.created_at_utc || data.reply_message.createdAtUtc);
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to send message:', err);
-            }
-        });
-
-        loadMessages();
-    </script>
+    loadMessages();
+</script>
 }

@@ -66,7 +66,7 @@ using (var scope = app.Services.CreateScope())
 // Configure Middleware Pipeline
 app.UseExceptionHandler();
 
-if (app.Environment.IsDevelopment() || true)
+if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();

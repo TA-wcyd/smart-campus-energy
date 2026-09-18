@@ -3,20 +3,24 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - GridWise AI Energy Optimizer</title>
-    <link rel="stylesheet" href="~/css/site.css" />
+    <meta name="description" content="GridWise AI — Smart Campus Microgrid Energy Optimizer. BUP CSE FEST 2026 LLM Energy Challenge." />
+    <title>@ViewData["Title"] — GridWise AI</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
     <header class="navbar-header">
         <div class="nav-container">
-            <a class="nav-brand" asp-page="/Index">⚡ GridWise AI</a>
+            <a class="nav-brand" asp-page="/Index">
+                <div class="nav-brand-icon">⚡</div>
+                GridWise <span style="color:var(--indigo-400);margin-left:1px;">AI</span>
+            </a>
             <nav class="nav-links">
-                <a class="nav-link" asp-page="/Index">Home</a>
+                <a class="nav-link" asp-page="/Index">Dashboard</a>
                 <a class="nav-link" asp-page="/Optimize">Optimize</a>
                 <a class="nav-link" asp-page="/History">History</a>
                 <a class="nav-link" asp-page="/Chat">Chat</a>
-                <a class="nav-link" href="/swagger" target="_blank">Swagger</a>
-                <a class="nav-link" href="/health" target="_blank">Health</a>
+                <a class="nav-link btn-outline" href="/swagger" target="_blank">API&nbsp;↗</a>
             </nav>
         </div>
     </header>
@@ -27,7 +31,14 @@
 
     <footer class="footer-container">
         <div class="footer-content">
-            <span>&copy; 2026 BUP CSE FEST - GridWise LLM Energy Optimization Challenge</span>
+            <span>
+                <span class="footer-brand">⚡ GridWise AI</span>
+                &nbsp;·&nbsp; BUP CSE FEST 2026 — Smart Campus Energy Challenge
+            </span>
+            <span style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;">
+                <span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 5px var(--success);display:inline-block;animation:pulse 2.5s ease-in-out infinite;"></span>
+                All systems operational
+            </span>
         </div>
     </footer>
 
