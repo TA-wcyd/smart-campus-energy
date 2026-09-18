@@ -1,15 +1,5 @@
-@MyApp.Api_HostAddress = http://localhost:5000
-
-### Health Check
-GET {{MyApp.Api_HostAddress}}/health
-Accept: application/json
-
-### Run Optimization (Raw Demo)
-POST {{MyApp.Api_HostAddress}}/optimize-energy/raw
-Content-Type: application/json
-
 {
-  "scenario_id": "demo-bup-2026-01",
+  "scenario_id": "bup-cse-fest-2026-sample",
   "operator_notes": [
     "Solar output will drop to about 20% from 1 PM to 3 PM.",
     "Do not charge the battery between 2 PM and 4 PM.",

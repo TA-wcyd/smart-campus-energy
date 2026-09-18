@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - GridWise AI Energy Optimizer</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header class="navbar-header">
+        <div class="nav-container">
+            <a class="nav-brand" asp-page="/Index">⚡ GridWise AI</a>
+            <nav class="nav-links">
+                <a class="nav-link" asp-page="/Index">Home</a>
+                <a class="nav-link" asp-page="/Optimize">Optimize</a>
+                <a class="nav-link" asp-page="/History">History</a>
+                <a class="nav-link" asp-page="/Chat">Chat</a>
+                <a class="nav-link" href="/swagger" target="_blank">Swagger</a>
+                <a class="nav-link" href="/health" target="_blank">Health</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        @RenderBody()
+    </main>
+
+    <footer class="footer-container">
+        <div class="footer-content">
+            <span>&copy; 2026 BUP CSE FEST - GridWise LLM Energy Optimization Challenge</span>
+        </div>
+    </footer>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

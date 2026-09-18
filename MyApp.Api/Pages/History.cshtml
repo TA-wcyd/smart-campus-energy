@@ -1,0 +1,51 @@
+@page
+@model HistoryModel
+@{
+    ViewData["Title"] = "Optimization History";
+}
+
+<div class="page-header">
+    <h2>📜 Optimization History</h2>
+    <p class="subtitle">Review past 24-hour optimization runs, scenario inputs, and executed dispatch schedules.</p>
+</div>
+
+<div class="card">
+    @if (Model.Scenarios == null || Model.Scenarios.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📁</div>
+            <h3>No Scenarios Recorded</h3>
+            <p>You haven't persisted any optimization runs yet. Go to <a asp-page="/Optimize">Optimize</a> and submit a scenario.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Scenario ID</th>
+                        <th>Created At (UTC)</th>
+                        <th>Scenario GUID</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Scenarios)
+                    {
+                        <tr class="clickable-row" onclick="window.location.href='/History/@item.Id'">
+                            <td class="font-bold">@item.ScenarioId</td>
+                            <td>@item.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td class="font-mono text-muted">@item.Id</td>
+                            <td>
+                                <a asp-page="/HistoryDetail" asp-route-id="@item.Id" class="btn btn-sm btn-outline">
+                                    View Details &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

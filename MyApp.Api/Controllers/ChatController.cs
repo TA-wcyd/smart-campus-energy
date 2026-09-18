@@ -1,88 +1,102 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using MyApp.Core.DTOs;
-using MyApp.Core.Interfaces;
 using MyApp.Core.Models;
-using MyApp.Infrastructure.Data;
 
 namespace MyApp.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("chat")]
 public class ChatController : ControllerBase
 {
-    private readonly ILlmService _llmService;
-    private readonly AppDbContext _dbContext;
     private readonly ILogger<ChatController> _logger;
+    // In-memory backing store for user chat messages
+    private static readonly List<ChatMessage> ChatStore = new();
+    private static readonly object StoreLock = new();
 
-    public ChatController(ILlmService llmService, AppDbContext dbContext, ILogger<ChatController> logger)
+    public ChatController(ILogger<ChatController> logger)
     {
-        _llmService = llmService;
-        _dbContext = dbContext;
         _logger = logger;
     }
 
     [HttpPost]
-    public async Task<ActionResult<ChatResponse>> SendMessage([FromBody] ChatRequest request, CancellationToken ct)
+    public IActionResult PostChatMessage([FromBody] ChatMessageRequest? request)
     {
-        if (string.IsNullOrWhiteSpace(request.Prompt))
+        if (request == null || string.IsNullOrWhiteSpace(request.Message))
         {
-            return BadRequest("Prompt cannot be empty.");
+            return BadRequest(new { error = "Message cannot be empty." });
         }
 
-        // 1. Record user message
-        var userMsg = new ChatMessage
+        try
         {
-            UserId = request.UserId,
-            Role = "user",
-            Content = request.Prompt,
-            Timestamp = DateTime.UtcNow
-        };
-        _dbContext.ChatMessages.Add(userMsg);
+            var userMsg = new ChatMessage
+            {
+                Id = Guid.NewGuid(),
+                UserId = request.UserId != Guid.Empty ? request.UserId : Guid.NewGuid(),
+                Role = "user",
+                Content = request.Message.Trim(),
+                CreatedAtUtc = DateTime.UtcNow
+            };
 
-        // 2. Generate LLM response
-        var responseText = await _llmService.GenerateResponseAsync(request.Prompt, request.SystemPrompt, ct);
+            var botMsg = new ChatMessage
+            {
+                Id = Guid.NewGuid(),
+                UserId = userMsg.UserId,
+                Role = "assistant",
+                Content = $"Received message: \"{userMsg.Content}\". System is online and monitoring grid status.",
+                CreatedAtUtc = DateTime.UtcNow.AddMilliseconds(50)
+            };
 
-        // 3. Record assistant message
-        var assistantMsg = new ChatMessage
-        {
-            UserId = request.UserId,
-            Role = "assistant",
-            Content = responseText,
-            Timestamp = DateTime.UtcNow
-        };
-        _dbContext.ChatMessages.Add(assistantMsg);
+            lock (StoreLock)
+            {
+                ChatStore.Add(userMsg);
+                ChatStore.Add(botMsg);
+            }
 
-        await _dbContext.SaveChangesAsync(ct);
+            _logger.LogInformation("Saved chat message for user {UserId}", userMsg.UserId);
 
-        return Ok(new ChatResponse(responseText, assistantMsg.Timestamp));
-    }
-
-    [HttpGet("history")]
-    public async Task<ActionResult<IEnumerable<ChatMessage>>> GetChatHistory([FromQuery] Guid? userId, CancellationToken ct)
-    {
-        var query = _dbContext.ChatMessages.AsNoTracking();
-
-        if (userId.HasValue)
-        {
-            query = query.Where(m => m.UserId == userId.Value);
+            return Ok(new
+            {
+                status = "ack",
+                user_message = userMsg,
+                reply_message = botMsg
+            });
         }
-
-        var messages = await query.OrderBy(m => m.Timestamp).ToListAsync(ct);
-        return Ok(messages);
-    }
-
-    [HttpGet("stream")]
-    public async IAsyncEnumerable<string> StreamMessage(
-        [FromQuery] string prompt,
-        [FromQuery] string? systemPrompt,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-    {
-        Response.Headers.Append("Content-Type", "text/event-stream");
-
-        await foreach (var token in _llmService.StreamResponseAsync(prompt, systemPrompt, ct))
+        catch (Exception ex)
         {
-            yield return $"data: {token}\n\n";
+            _logger.LogError(ex, "Error storing chat message.");
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to store chat message." });
         }
     }
+
+    [HttpGet("{userId:guid}")]
+    public IActionResult GetChatMessages(Guid userId)
+    {
+        try
+        {
+            lock (StoreLock)
+            {
+                var messages = ChatStore
+                    .Where(m => m.UserId == userId)
+                    .OrderBy(m => m.CreatedAtUtc)
+                    .TakeLast(50)
+                    .ToList();
+
+                return Ok(messages);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving chat messages for user {UserId}", userId);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to retrieve chat messages." });
+        }
+    }
+}
+
+public class ChatMessageRequest
+{
+    [JsonPropertyName("userId")]
+    public Guid UserId { get; set; }
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
 }

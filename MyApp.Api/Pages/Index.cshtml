@@ -1,0 +1,37 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home";
+}
+
+<div class="hero-section">
+    <div class="hero-badge">BUP CSE FEST 2026 • AI Challenge</div>
+    <h1 class="hero-title">Smart Campus Energy Management with LLM Reasoning</h1>
+    <p class="hero-subtitle">
+        Intelligent microgrid schedule optimizer combining generative LLM natural-language directive interpretation with constraint-based energy planning, solar harvesting, and battery storage optimization.
+    </p>
+
+    <div class="hero-actions">
+        <a asp-page="/Optimize" class="btn btn-primary btn-lg">Launch Optimizer &rarr;</a>
+        <a asp-page="/History" class="btn btn-secondary btn-lg">View Run History</a>
+        <a href="/swagger" target="_blank" class="btn btn-outline btn-lg">API Documentation</a>
+    </div>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <h3>Natural Language Directives</h3>
+            <p>Translates complex operator notes into actionable mathematical constraints and schedule boundaries.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔋</div>
+            <h3>Battery & Tariff Arbitrage</h3>
+            <p>Charges during low-tariff or high-solar windows and discharges during expensive peak hours.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Deterministic Schedule Validator</h3>
+            <p>Guarantees battery capacity limits, ramp rates, and grid caps are strictly respected.</p>
+        </div>
+    </div>
+</div>
