@@ -1,0 +1,55 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Build, Test & Validate Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore MyApp.sln
+
+      - name: Build solution (Release)
+        run: dotnet build MyApp.sln --configuration Release --no-restore
+
+      - name: Run tests (Release)
+        run: dotnet test MyApp.sln --configuration Release --no-build --verbosity normal
+
+      - name: Validate Docker build
+        run: docker build -t myapp:test .
+
+  deploy:
+    name: Deploy to Render
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render Deploy Hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not configured in GitHub repository secrets."
+            exit 1
+          fi
+          echo "Triggering Render deployment hook..."
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+          echo "Render deployment triggered successfully."

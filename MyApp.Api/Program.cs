@@ -11,6 +11,13 @@ Env.TraversePath().Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Dynamic PORT handling for cloud hosting environments (e.g., Render)
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 // Add Controllers with snake_case JSON serialization
 builder.Services.AddControllers()
     .AddApplicationPart(typeof(MyApp.Api.Controllers.HealthController).Assembly)

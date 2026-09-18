@@ -1,0 +1,25 @@
+# Build and binary outputs
+bin/
+obj/
+TestResults/
+
+# Git and GitHub
+.git/
+.github/
+
+# IDE and Editor files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# Environment and Secrets
+.env
+.env.*
+!.env.example
+
+# Local development files
+docker-compose.yml
+README.md
